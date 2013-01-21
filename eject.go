@@ -1,4 +1,4 @@
-package main
+package eject
 
 import (
 	"github.com/mattn/go-ole"
@@ -16,8 +16,3 @@ func Eject() {
 		oleutil.MustCallMethod(drive, "Eject")
 	}
 }
-
-func main() {
-	Eject()
-}
-
