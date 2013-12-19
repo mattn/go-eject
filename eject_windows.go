@@ -1,18 +1,35 @@
 package eject
 
 import (
-	"github.com/mattn/go-ole"
-	"github.com/mattn/go-ole/oleutil"
+	"errors"
+	"syscall"
+	"unsafe"
 )
 
-func Eject() {
-	ole.CoInitialize(0)
+var winmm = syscall.MustLoadDLL("winmm.dll")
+var mciSendStringProc = winmm.MustFindProc("mciSendStringW")
+var mciGetErrorStringProc = winmm.MustFindProc("mciGetErrorStringW")
 
-	unk, _ := oleutil.CreateObject("WMPlayer.OCX")
-	wmp, _ := unk.QueryInterface(ole.IID_IDispatch)
-	drives := oleutil.MustGetProperty(wmp, "cdromCollection").ToIDispatch()
-	for i := 0; i < int(oleutil.MustGetProperty(drives, "Count").Val); i++ {
-		drive := oleutil.MustCallMethod(drives, "Item", i).ToIDispatch()
-		oleutil.MustCallMethod(drive, "Eject")
+func mciGetErrorString(mcierr int) string {
+	var b [256]uint16
+	mciGetErrorStringProc.Call(uintptr(mcierr), uintptr(unsafe.Pointer(&b[0])), uintptr(256))
+	return syscall.UTF16ToString(b[:])
+}
+
+func mciSendString(cmd string) int {
+	r1, _, _ := mciSendStringProc.Call(uintptr(unsafe.Pointer(syscall.StringToUTF16Ptr(cmd))), 0, 0, 0)
+	return int(r1)
+}
+
+func Eject() error {
+	r := mciSendString("capability cdaudio can eject")
+	if r == 0 {
+		r = mciSendString("set cdaudio door open")
+	} else {
+		r = mciSendString("set cdaudio door close")
 	}
+	if r != 0 {
+		return errors.New(mciGetErrorString(r))
+	}
+	return nil
 }
